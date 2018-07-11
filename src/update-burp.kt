@@ -1,7 +1,7 @@
 import org.json.JSONObject
 import org.json.JSONTokener
 import java.io.FileOutputStream
-import java.lang.System.*
+import java.lang.System.getProperty
 import java.net.URL
 import java.net.URLEncoder
 import java.util.prefs.Preferences
@@ -11,22 +11,37 @@ import java.util.regex.Pattern
 fun main(args: Array<String>) {
     val license = getLicense()
     val osDetails = getOS()
-    if(args.isNotEmpty()) {
-        osDetails.base = args[0]
+    var version: String? = null
+
+    for(i in 0 until args.size) {
+        if(args[i] == "--path") {
+            osDetails.base = args[i + 1]
+        }
+        if(args[i] == "--version") {
+            version = args[i + 1]
+
+        }
     }
-    val burpVersion = getBurpVersion(osDetails)
-    println("Current Burp version: $burpVersion")
-    val update = getUpdate(ProductDetails("pro", burpVersion, osDetails.installationType), license)
-    if(update == null) {
-        println("Already up to date")
+
+    var update: ProductDetails?
+    if(version == null) {
+        version = getBurpVersion(osDetails)
+        println("Current Burp version: $version")
+        update = getUpdate(ProductDetails("pro", version, osDetails.installationType), license)
+        if (update == null) {
+            println("Already up to date")
+            return
+        }
     }
     else {
-        println("Downloading Burp version: ${update.version}")
-        downloadUpdate(update, license)
-        println("Installing update")
-        osDetails.installUpdate(update)
-        println("Installation completed")
+        update = ProductDetails("pro", version, osDetails.installationType)
     }
+
+    println("Downloading Burp version: ${update.version}")
+    val fileName = downloadUpdate(update, license)
+    println("Installing update")
+    osDetails.installUpdate(fileName)
+    println("Installation completed")
 }
 
 fun getOS(): OSDetails {
@@ -56,7 +71,7 @@ interface OSDetails {
     val jar: String
     val java: String
 
-    fun installUpdate(productDetails: ProductDetails)
+    fun installUpdate(fileName: String)
 }
 
 class MacOS: OSDetails {
@@ -65,8 +80,8 @@ class MacOS: OSDetails {
     override val jar = "java/app/burpsuite_pro.jar"
     override val java = "PlugIns/jre.bundle/Contents/Home/jre/bin/java"
 
-    override fun installUpdate(productDetails: ProductDetails) {
-        var process = Runtime.getRuntime().exec(arrayOf("hdiutil", "attach", productDetails.fileName))
+    override fun installUpdate(fileName: String) {
+        var process = Runtime.getRuntime().exec(arrayOf("hdiutil", "attach", fileName))
         process.waitFor()
         val hdiUtilOutput = process.inputStream.bufferedReader().use { it.readLine() }
         // TODO: parse hdiUtilOutput more robustly
@@ -82,8 +97,8 @@ class Windows(override val installationType: String): OSDetails {
     override val jar = "java/app/burpsuite_pro.jar"
     override val java = "PlugIns/jre.bundle/Contents/Home/jre/bin/java"
 
-    override fun installUpdate(productDetails: ProductDetails) {
-        runAndCheck(arrayOf(productDetails.fileName!!, "-q"))
+    override fun installUpdate(fileName: String) {
+        runAndCheck(arrayOf(fileName, "-q"))
     }
 }
 
@@ -93,8 +108,8 @@ class Linux: OSDetails {
     override val jar = "burpsuite_pro.jar"
     override val java = "jre/bin/java"
 
-    override fun installUpdate(productDetails: ProductDetails) {
-        runAndCheck(arrayOf("/bin/sh", productDetails.fileName!!, "-q"))
+    override fun installUpdate(fileName: String) {
+        runAndCheck(arrayOf("/bin/sh", fileName, "-q"))
     }
 }
 
@@ -128,8 +143,7 @@ fun getLicense(): String {
 data class ProductDetails(
     val product: String,
     val version: String,
-    val platform: String,
-    val fileName: String? = null
+    val platform: String
 )
 
 fun getUpdate(productDetails: ProductDetails, license: String): ProductDetails? {
@@ -143,27 +157,20 @@ fun getUpdate(productDetails: ProductDetails, license: String): ProductDetails? 
     }
 
     val version = updates.getJSONObject(0).getString("version")
-
-    val builds = updates.getJSONObject(0).getJSONArray("builds")
-    var fileName: String? = null
-    for(i in 1 until builds.length()) {
-        val build = builds.getJSONObject(i)
-        val installationType = build.getString("installationType")
-        if(installationType == productDetails.platform) {
-            fileName = build.getString("filename")
-        }
-    }
-    return ProductDetails(productDetails.product, version, productDetails.platform, fileName)
+    return ProductDetails(productDetails.product, version, productDetails.platform)
 }
 
-fun downloadUpdate(productDetails: ProductDetails, license: String) {
+fun downloadUpdate(productDetails: ProductDetails, license: String): String {
     val url = URL("https://$portswigger/burp/releases/intooldownload?product=${productDetails.product}&version=${productDetails.version}&installationType=${productDetails.platform}&license=${URLEncoder.encode(license, "utf-8")}")
+    val urlConnection = url.openConnection()
+    val fileName = urlConnection.headerFields["Content-Disposition"]!![0].substringAfter("filename=")
 
-    val inputStream = url.openStream()
-    val outputStream = FileOutputStream(productDetails.fileName)
+    val inputStream = urlConnection.getInputStream()
+    val outputStream = FileOutputStream(fileName)
     inputStream.use { input ->
         outputStream.use { fileOut ->
             input.copyTo(fileOut)
         }
     }
+    return fileName
 }

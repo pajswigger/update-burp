@@ -1,8 +1,8 @@
 # Update Burp
 
-This program automatically updates Burp to the latest version. Usage:
+This program automatically updates Burp to a specific version, or the latest version. Usage:
 
-    java -jar update-burp.jar [burp path]
+    java -jar update-burp.jar [--version x.x.x] [--path /x/x/x]
     
 You only need to specify the Burp path if installed in a non-default location.
 
