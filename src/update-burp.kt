@@ -1,5 +1,6 @@
 import org.json.JSONObject
 import org.json.JSONTokener
+import java.io.File
 import java.io.FileOutputStream
 import java.lang.System.getProperty
 import java.net.URL
@@ -69,6 +70,7 @@ interface OSDetails {
     val installationType: String
     var base: String
     val jar: String
+    val jar2: String
     val java: String
 
     fun installUpdate(fileName: String)
@@ -78,6 +80,7 @@ class MacOS: OSDetails {
     override val installationType = "macos"
     override var base = "/Applications/Burp Suite Professional.app/Contents/"
     override val jar = "java/app/burpsuite_pro.jar"
+    override val jar2 = "java/app/burpsuite_pro-macos.jar"
     override val java = "PlugIns/jre.bundle/Contents/Home/jre/bin/java"
 
     override fun installUpdate(fileName: String) {
@@ -93,9 +96,10 @@ class MacOS: OSDetails {
 }
 
 class Windows(override val installationType: String): OSDetails {
-    override var base = "/Applications/Burp Suite Professional.app/Contents/"
-    override val jar = "java/app/burpsuite_pro.jar"
-    override val java = "PlugIns/jre.bundle/Contents/Home/jre/bin/java"
+    override var base = "c:/Program Files/BurpSuitePro/"
+    override val jar = "burpsuite_pro.jar"
+    override val jar2 = "burpsuite_pro-windows.jar"
+    override val java = "jre/bin/java"
 
     override fun installUpdate(fileName: String) {
         runAndCheck(arrayOf(fileName, "-q"))
@@ -106,6 +110,7 @@ class Linux: OSDetails {
     override val installationType = "linux"
     override var base = "/opt/BurpSuitePro/"
     override val jar = "burpsuite_pro.jar"
+    override val jar2 = "burpsuite_pro-linux.jar"
     override val java = "jre/bin/java"
 
     override fun installUpdate(fileName: String) {
@@ -123,7 +128,11 @@ fun runAndCheck(command: Array<String>) {
 }
 
 fun getBurpVersion(osDetails: OSDetails): String {
-    val process = Runtime.getRuntime().exec(arrayOf(osDetails.base + osDetails.java, "-Djava.awt.headless=true", "-jar", osDetails.base + osDetails.jar, "--version"))
+    var jarPath = osDetails.base + osDetails.jar2
+    if(!File(jarPath).exists()) {
+        jarPath = osDetails.base + osDetails.jar
+    }
+    val process = Runtime.getRuntime().exec(arrayOf(osDetails.base + osDetails.java, "-Djava.awt.headless=true", "-jar", jarPath, "--version"))
     val version = process.inputStream.bufferedReader().use { it.readLine() }
     return version.substringBefore("-")
 }
